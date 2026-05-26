@@ -8,17 +8,37 @@ import {
   CheckCircle2,
   AlertCircle,
   CreditCard,
-  MessageCircle,
+  Smartphone,
 } from "lucide-react";
 
 export default function NfcScannerView() {
   const ndefRef = useRef<any>(null);
 
   const [supported, setSupported] = useState(true);
-  const [status, setStatus] = useState("Initializing NFC...");
+  const [status, setStatus] = useState(
+    "Press START NFC before scanning"
+  );
+
   const [cardData, setCardData] = useState("");
+
   const [isScanning, setIsScanning] = useState(false);
+
   const [isWriting, setIsWriting] = useState(false);
+
+  // ================= CHECK SUPPORT =================
+  const checkSupport = () => {
+    if (typeof window === "undefined") return false;
+
+    if (!("NDEFReader" in window)) {
+      setSupported(false);
+
+      setStatus("Web NFC not supported");
+
+      return false;
+    }
+
+    return true;
+  };
 
   // ================= WHATSAPP =================
   const sendWhatsApp = (message: string) => {
@@ -29,36 +49,23 @@ export default function NfcScannerView() {
     window.open(url, "_blank");
   };
 
-  // ================= INIT NFC =================
-  useEffect(() => {
-    initNFC();
-  }, []);
-
-  const initNFC = async () => {
+  // ================= START NFC =================
+  const startScan = async () => {
     try {
-      if (!("NDEFReader" in window)) {
-        setSupported(false);
-        setStatus("Web NFC is not supported");
-        return;
-      }
+      if (!checkSupport()) return;
+
+      setIsScanning(true);
+
+      setStatus("Requesting NFC permission...");
 
       // @ts-ignore
       ndefRef.current = new NDEFReader();
 
-      await startFastScan();
-    } catch (err) {
-      console.error(err);
-      setStatus("Failed initialize NFC");
-    }
-  };
-
-  // ================= FAST SCAN =================
-  const startFastScan = async () => {
-    try {
-      setIsScanning(true);
-      setStatus("Ready • Tap NFC card");
-
+      // IMPORTANT:
+      // MUST BE FROM USER CLICK
       await ndefRef.current.scan();
+
+      setStatus("Ready • Tap NFC card");
 
       ndefRef.current.onreading = (event: any) => {
         try {
@@ -72,20 +79,20 @@ export default function NfcScannerView() {
 
           setCardData(payload);
 
-          setStatus("Card scanned successfully");
+          setStatus("NFC scanned successfully");
 
-          // ================= SEND TO WHATSAPP =================
+          // SEND TO WA
           sendWhatsApp(
             `✅ NFC SCAN SUCCESS
 
 📌 Data:
 ${payload}
 
-🕒 Time:
-${new Date().toLocaleString()}`
+🕒 ${new Date().toLocaleString()}`
           );
         } catch (err) {
           console.error(err);
+
           setStatus("Failed reading NFC");
         }
       };
@@ -93,9 +100,23 @@ ${new Date().toLocaleString()}`
       ndefRef.current.onreadingerror = () => {
         setStatus("Cannot read NFC card");
       };
-    } catch (err) {
-      console.error(err);
-      setStatus("NFC permission denied");
+    } catch (error: any) {
+      console.error(error);
+
+      setIsScanning(false);
+
+      // ================= HANDLE ERROR =================
+      if (error?.name === "NotAllowedError") {
+        setStatus(
+          "Permission denied • Allow NFC permission in Chrome"
+        );
+      } else if (error?.name === "NotSupportedError") {
+        setStatus("Device/browser not supported");
+      } else if (error?.name === "NotReadableError") {
+        setStatus("NFC unavailable");
+      } else {
+        setStatus("Failed start NFC");
+      }
     }
   };
 
@@ -103,7 +124,12 @@ ${new Date().toLocaleString()}`
   const writeNFC = async () => {
     try {
       if (!cardData) {
-        setStatus("No card data available");
+        setStatus("No NFC data available");
+        return;
+      }
+
+      if (!ndefRef.current) {
+        setStatus("Start NFC first");
         return;
       }
 
@@ -115,20 +141,18 @@ ${new Date().toLocaleString()}`
 
       setStatus("NFC written successfully");
 
-      // ================= SEND WA AFTER WRITE =================
       sendWhatsApp(
         `✅ NFC WRITE SUCCESS
 
 📌 Data:
 ${cardData}
 
-🕒 Time:
-${new Date().toLocaleString()}`
+🕒 ${new Date().toLocaleString()}`
       );
 
       setIsWriting(false);
-    } catch (err) {
-      console.error(err);
+    } catch (error) {
+      console.error(error);
 
       setStatus("Failed writing NFC");
 
@@ -147,6 +171,7 @@ ${new Date().toLocaleString()}`
 
   return (
     <>
+      {/* BG */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute left-[-150px] top-[-150px] h-[400px] w-[400px] rounded-full bg-cyan-500/20 blur-3xl" />
 
@@ -160,7 +185,7 @@ ${new Date().toLocaleString()}`
           <div>
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-300 backdrop-blur-xl">
               <Wifi className="h-4 w-4" />
-              NFC Smart System
+              NFC Secure System
             </div>
 
             <h1 className="text-4xl font-black leading-tight md:text-6xl">
@@ -172,12 +197,12 @@ ${new Date().toLocaleString()}`
             </h1>
 
             <p className="mt-5 max-w-2xl text-base text-gray-400 md:text-lg">
-              Scan NFC cards, write NFC tags, and automatically send results to
-              WhatsApp.
+              Full fixed NFC scanner with permission handling, write support,
+              and WhatsApp integration.
             </p>
           </div>
 
-          {/* STATUS CARD */}
+          {/* STATUS */}
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-2xl">
             <div className="flex items-center gap-4">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-violet-500">
@@ -185,15 +210,17 @@ ${new Date().toLocaleString()}`
               </div>
 
               <div>
-                <p className="text-sm text-gray-400">NFC Status</p>
+                <p className="text-sm text-gray-400">System Status</p>
 
-                <h3 className="font-semibold text-cyan-300">{status}</h3>
+                <h3 className="font-semibold text-cyan-300">
+                  {status}
+                </h3>
               </div>
             </div>
           </div>
         </div>
 
-        {/* GRID */}
+        {/* MAIN GRID */}
         <div className="mt-12 grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
           {/* LEFT */}
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-2xl md:p-8">
@@ -215,14 +242,14 @@ ${new Date().toLocaleString()}`
             </div>
 
             {/* BUTTONS */}
-            <div className="mt-10 grid gap-4 md:grid-cols-3">
+            <div className="mt-10 grid gap-4 md:grid-cols-2">
               <button
-                onClick={startFastScan}
+                onClick={startScan}
                 className="rounded-2xl bg-gradient-to-r from-cyan-500 to-cyan-400 p-[1px] transition hover:scale-[1.02]"
               >
                 <div className="flex items-center justify-center gap-3 rounded-2xl bg-[#0b1022] px-6 py-4 font-semibold">
                   <ScanLine className="h-5 w-5" />
-                  Scan
+                  START NFC
                 </div>
               </button>
 
@@ -233,24 +260,7 @@ ${new Date().toLocaleString()}`
               >
                 <div className="flex items-center justify-center gap-3 rounded-2xl bg-[#0b1022] px-6 py-4 font-semibold">
                   <Copy className="h-5 w-5" />
-                  {isWriting ? "Writing..." : "Write"}
-                </div>
-              </button>
-
-              <button
-                onClick={() =>
-                  sendWhatsApp(
-                    `📌 Manual NFC Report
-
-                  Data:
-                  ${cardData || "No data"}`
-                                    )
-                }
-                className="rounded-2xl bg-gradient-to-r from-green-500 to-emerald-500 p-[1px] transition hover:scale-[1.02]"
-              >
-                <div className="flex items-center justify-center gap-3 rounded-2xl bg-[#0b1022] px-6 py-4 font-semibold">
-                  <MessageCircle className="h-5 w-5" />
-                  WhatsApp
+                  {isWriting ? "Writing..." : "WRITE NFC"}
                 </div>
               </button>
             </div>
@@ -261,8 +271,7 @@ ${new Date().toLocaleString()}`
                 <CheckCircle2 className="h-5 w-5 text-cyan-300" />
 
                 <span className="text-sm text-cyan-100">
-                  Persistent NFC scanner optimized for faster response and
-                  WhatsApp integration.
+                  Optimized for Android Chrome HTTPS localhost only.
                 </span>
               </div>
             </div>
@@ -277,7 +286,7 @@ ${new Date().toLocaleString()}`
                   <h3 className="text-xl font-bold">NFC Payload</h3>
 
                   <p className="mt-1 text-sm text-gray-400">
-                    Realtime NFC result
+                    Realtime scan result
                   </p>
                 </div>
 
@@ -304,20 +313,24 @@ ${new Date().toLocaleString()}`
               </div>
             </div>
 
-            {/* FEATURES */}
+            {/* REQUIREMENT */}
             <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-cyan-500/10 to-violet-500/10 p-6 backdrop-blur-2xl">
-              <h3 className="text-xl font-bold">Features</h3>
+              <div className="flex items-center gap-3">
+                <Smartphone className="h-6 w-6 text-cyan-300" />
+
+                <h3 className="text-xl font-bold">Requirements</h3>
+              </div>
 
               <div className="mt-5 space-y-4 text-sm text-gray-300">
-                <Feature text="Persistent NFC scanner" />
-                <Feature text="Fast NFC response" />
-                <Feature text="Automatic WhatsApp sender" />
-                <Feature text="Modern glassmorphism UI" />
-                <Feature text="Responsive mobile layout" />
+                <Feature text="Android device only" />
+                <Feature text="Chrome latest version" />
+                <Feature text="NFC enabled" />
+                <Feature text="HTTPS or localhost" />
+                <Feature text="Must press START NFC first" />
               </div>
             </div>
 
-            {/* SUPPORT */}
+            {/* UNSUPPORTED */}
             {!supported && (
               <div className="rounded-3xl border border-red-500/20 bg-red-500/10 p-6">
                 <h3 className="font-bold text-red-300">
@@ -325,7 +338,7 @@ ${new Date().toLocaleString()}`
                 </h3>
 
                 <p className="mt-2 text-sm text-red-200">
-                  Use Android Chrome latest version and enable NFC.
+                  Use Android Chrome latest version.
                 </p>
               </div>
             )}
@@ -340,6 +353,7 @@ function Feature({ text }: { text: string }) {
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-white/5 bg-white/5 p-4">
       <div className="h-2 w-2 rounded-full bg-cyan-400" />
+
       <span>{text}</span>
     </div>
   );
